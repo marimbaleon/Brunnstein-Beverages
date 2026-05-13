@@ -7,7 +7,7 @@
 
 ## Components
 
-**AWS Aurora DSQL**: Central database for the project. Contains gold-layer data as base for AI Use Cases. Serverless, Postgres-compatible, scale-to-zero. Chosen over RDS (always-on cost), Aurora Serverless v2 (15s cold start).
+**AWS Aurora DSQL**: Central database for the project. Mimics data sources as base for Agentic AI Use Cases. Serverless, Postgres-compatible, scale-to-zero. Chosen over RDS (always-on cost), Aurora Serverless v2 (15s cold start).
 
 **AWS S3** for all incoming data from fictional source systems, eg. documents, IoT data, CRM, ERP, and more.
 
@@ -35,7 +35,7 @@ Trade-off: AWS credentials are required even for local development, and a runawa
 
 ## Deliberately out of scope for v1
 
-- Ingestion / lakehouse layer (Databricks, Delta). The Postgres tables represent already-curated gold data.
+- Analytical platform (eg. Databricks, Snowflake). Not needed at start, since DSQL mimics data sources and Agents run locally in Docker container.
 - Email ingress (SES, SQS). "Invoice arrived" is simulated with a file picker.
 - Vector database. Not needed for use case 1.
 - Authentication. Single-user demo.

@@ -28,3 +28,15 @@ __pycache__/
 # Build
 dist/
 build/
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Terraform
+infra/.terraform/
+infra/terraform.tfstate
+infra/terraform.tfstate.backup
+infra/terraform.tfvars
+*.tfplan

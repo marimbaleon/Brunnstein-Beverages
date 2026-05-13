@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+
+alert_email = "your-email@example.com"
+
+# Override the defaults if you want:
+# project_name      = "brunnstein"
+# aws_region        = "eu-central-1"
+# aws_profile       = "brunnstein"
+# budget_amount_usd = 30
