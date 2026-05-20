@@ -11,13 +11,13 @@ from typing import Any
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
-from data.generators.goods_receipts import generate_goods_receipts
-from data.generators.purchase_orders import generate_purchase_orders
-from data.generators.raw_materials import generate_raw_materials
-from data.generators.supplier_invoices import generate_supplier_invoices
-from data.generators.suppliers import generate_suppliers
-from data.load_to_dsql import get_engine, load_table, strip_foreign_keys
-from data.models import Base
+from data.erp.generators.goods_receipts import generate_goods_receipts
+from data.erp.generators.purchase_orders import generate_purchase_orders
+from data.erp.generators.raw_materials import generate_raw_materials
+from data.erp.generators.supplier_invoices import generate_supplier_invoices
+from data.erp.generators.suppliers import generate_suppliers
+from data.erp.load_to_dsql import get_engine, load_table, strip_foreign_keys
+from data.erp.models import Base
 
 load_dotenv()
 
@@ -38,7 +38,7 @@ def main(
     materials = generate_raw_materials(seed=seed)
     pos = generate_purchase_orders(suppliers, materials, year_range=year_range, seed=seed)
     grs = generate_goods_receipts(pos, seed=seed)
-    documents, invoices = generate_supplier_invoices(grs, seed=seed)
+    invoices = generate_supplier_invoices(grs, seed=seed)
 
     # Snapshot child counts before the session commits and the instances detach.
     n_po_lines = sum(len(p.lines) for p in pos)
@@ -48,10 +48,9 @@ def main(
     with Session(engine) as session:
         load_table(session, suppliers)
         load_table(session, materials)
-        load_table(session, pos)        # cascades to purchase_order_line
-        load_table(session, grs)        # cascades to goods_receipt_line
-        load_table(session, documents)
-        load_table(session, invoices)   # cascades to supplier_invoice_line
+        load_table(session, pos)       # cascades to purchase_order_line
+        load_table(session, grs)       # cascades to goods_receipt_line
+        load_table(session, invoices)  # cascades to supplier_invoice_line
         session.commit()
 
     return {
@@ -62,7 +61,6 @@ def main(
         "purchase_order_lines": n_po_lines,
         "goods_receipts": len(grs),
         "goods_receipt_lines": n_gr_lines,
-        "documents": len(documents),
         "supplier_invoices": len(invoices),
         "supplier_invoice_lines": n_inv_lines,
     }

@@ -8,7 +8,7 @@ from __future__ import annotations
 import random
 from uuid import uuid4
 
-from data.models import RawMaterial, RawMaterialCategory
+from data.erp.models import RawMaterial, RawMaterialCategory
 
 _INACTIVE_RATE = 0.05
 

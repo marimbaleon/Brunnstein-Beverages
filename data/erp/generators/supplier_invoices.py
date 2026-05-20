@@ -11,9 +11,7 @@ from datetime import timedelta
 from decimal import Decimal
 from uuid import uuid4
 
-from data.models import (
-    Document,
-    DocumentType,
+from data.erp.models import (
     ExtractionStatus,
     GoodsReceipt,
     PurchaseOrder,
@@ -65,7 +63,7 @@ def _aggregate_received(receipts: list[GoodsReceipt]) -> dict[str, Decimal]:
 def generate_supplier_invoices(
     goods_receipts: list[GoodsReceipt],
     seed: int = 42,
-) -> tuple[list[Document], list[SupplierInvoice]]:
+) -> list[SupplierInvoice]:
     rng = random.Random(seed)
 
     # Group receipts by PO
@@ -73,7 +71,6 @@ def generate_supplier_invoices(
     for gr in goods_receipts:
         by_po[str(gr.purchase_order_id)].append(gr)
 
-    documents: list[Document] = []
     invoices: list[SupplierInvoice] = []
     inv_counter = 0
 
@@ -91,14 +88,6 @@ def generate_supplier_invoices(
         year = invoice_date.year
 
         s3_key = f"invoices/{year}/{_slug(supplier.name)}/{inv_counter:07d}.pdf"
-        doc = Document(
-            id=uuid4(),
-            s3_key=s3_key,
-            document_type=DocumentType.supplier_invoice,
-            original_filename=f"RG-{year}-{inv_counter:07d}.pdf",
-            content_hash=None,
-        )
-        documents.append(doc)
 
         # Per-line invoiced quantities: usually match received, occasionally drift.
         received_per_line = _aggregate_received(receipts)
@@ -128,7 +117,6 @@ def generate_supplier_invoices(
 
         if not inv_lines_data:
             inv_counter -= 1
-            documents.pop()
             continue
 
         total_net = sum((row[3] for row in inv_lines_data), Decimal("0"))
@@ -140,7 +128,7 @@ def generate_supplier_invoices(
             supplier_invoice_number=f"RG-{year}-{inv_counter:07d}",
             supplier_id=supplier.id,
             purchase_order_id=po.id,
-            source_document_id=doc.id,
+            source_s3_key=s3_key,
             invoice_date=invoice_date,
             due_date=due_date,
             total_net_eur=total_net,
@@ -154,7 +142,6 @@ def generate_supplier_invoices(
         )
         inv.supplier = supplier
         inv.purchase_order = po
-        inv.source_document = doc
 
         for i, (po_line, qty, price, net, vat, gross) in enumerate(inv_lines_data, start=1):
             line = SupplierInvoiceLine(
@@ -175,4 +162,4 @@ def generate_supplier_invoices(
 
         invoices.append(inv)
 
-    return documents, invoices
+    return invoices

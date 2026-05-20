@@ -80,13 +80,6 @@ class GoodsReceiptStatus(StrEnum):
     discrepancy = "discrepancy"
 
 
-class DocumentType(StrEnum):
-    supplier_invoice = "supplier_invoice"
-    contract = "contract"
-    certificate = "certificate"
-    other = "other"
-
-
 class RawMaterialCategory(StrEnum):
     packaging = "packaging"
     ingredient = "ingredient"
@@ -211,22 +204,6 @@ class GoodsReceiptLine(Base):
     purchase_order_line: Mapped[PurchaseOrderLine] = relationship()
 
 
-class Document(Base, TimestampMixin):
-    """Metadata for unstructured files stored in S3.
-
-    The file itself lives in S3 under `s3_key`; this row carries the
-    classification and provenance the agent needs.
-    """
-
-    __tablename__ = "document"
-
-    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
-    s3_key: Mapped[str] = mapped_column(String(500), unique=True)
-    document_type: Mapped[DocumentType] = mapped_column(_enum(DocumentType))
-    original_filename: Mapped[str | None] = mapped_column(String(255))
-    content_hash: Mapped[str | None] = mapped_column(String(64))
-
-
 class SupplierInvoice(Base, TimestampMixin):
     """An incoming invoice from a supplier.
 
@@ -241,7 +218,7 @@ class SupplierInvoice(Base, TimestampMixin):
     supplier_invoice_number: Mapped[str | None] = mapped_column(String(50))
     supplier_id: Mapped[UUID | None] = mapped_column(ForeignKey("supplier.id"))
     purchase_order_id: Mapped[UUID | None] = mapped_column(ForeignKey("purchase_order.id"))
-    source_document_id: Mapped[UUID] = mapped_column(ForeignKey("document.id"))
+    source_s3_key: Mapped[str] = mapped_column(String(500))
 
     invoice_date: Mapped[date | None] = mapped_column(Date)
     due_date: Mapped[date | None] = mapped_column(Date)
@@ -267,7 +244,6 @@ class SupplierInvoice(Base, TimestampMixin):
 
     supplier: Mapped[Supplier | None] = relationship()
     purchase_order: Mapped[PurchaseOrder | None] = relationship()
-    source_document: Mapped[Document] = relationship()
     lines: Mapped[list["SupplierInvoiceLine"]] = relationship(
         back_populates="supplier_invoice",
         cascade="all, delete-orphan",

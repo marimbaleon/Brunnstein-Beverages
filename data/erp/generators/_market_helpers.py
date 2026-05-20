@@ -10,7 +10,7 @@ import random
 import re
 from decimal import Decimal
 
-from data.models import RawMaterial, RawMaterialCategory, Supplier
+from data.erp.models import RawMaterial, RawMaterialCategory, Supplier
 
 # Specialization tag inferred from supplier name. Maps to a regex over material names.
 # `logistics` suppliers don't sell physical materials and are excluded from PO generation.

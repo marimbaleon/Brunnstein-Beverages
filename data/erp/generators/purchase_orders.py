@@ -11,13 +11,13 @@ from datetime import date, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
-from data.generators._market_helpers import (
+from data.erp.generators._market_helpers import (
     materials_for_supplier,
     pick_quantity,
     pick_unit_price,
     supplier_spec,
 )
-from data.models import (
+from data.erp.models import (
     PurchaseOrder,
     PurchaseOrderLine,
     PurchaseOrderStatus,

@@ -11,7 +11,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
-from data.models import (
+from data.erp.models import (
     GoodsReceipt,
     GoodsReceiptLine,
     GoodsReceiptStatus,

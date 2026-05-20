@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from faker import Faker
 
-from data.models import Supplier
+from data.erp.models import Supplier
 
 
 @dataclass(frozen=True)

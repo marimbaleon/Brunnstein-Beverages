@@ -1,13 +1,15 @@
 """Emit an ER diagram from the SQLAlchemy models.
 
 Run from project root:
-    uv run python -m data.generate_erd                    # mermaid to stdout
-    uv run python -m data.generate_erd --png docs/erd.png # render via kroki.io
+    uv run python -m data.erp.generate_erd                    # mermaid to stdout
+    uv run python -m data.erp.generate_erd --png docs/erd.png # render via kroki.io
+    uv run python -m data.erp.generate_erd --svg docs/erd.svg # same but svg
 
 Or from Python:
-    from data.generate_erd import generate_erd
-    generate_erd(format="markdown")                      # mermaid source as str
-    generate_erd(format="png", out_path="docs/erd.png")  # png bytes, also written to disk
+    from data.erp.generate_erd import generate_erd
+    generate_erd(format="markdown")                       # mermaid source as str
+    generate_erd(format="png", out_path="docs/erd.png")   # png bytes, also written to disk
+    generate_erd(format="svg", out_path="docs/erd.svg")   # svg source as str
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ import urllib.request
 
 from PIL import Image
 
-from data.models import Base
+from data.erp.models import Base
 
 
 def _build_mermaid() -> str:
@@ -34,14 +36,9 @@ def _build_mermaid() -> str:
     return "\n".join(lines)
 
 
-def _to_png(mermaid_src: str) -> bytes:
-    """Render mermaid source to PNG bytes via the kroki.io web service.
-
-    Kroki returns a transparent PNG. We flatten it onto a white background
-    so it reads correctly against dark notebook themes.
-    """
+def _kroki(mermaid_src: str, fmt: str) -> bytes:
     req = urllib.request.Request(
-        "https://kroki.io/mermaid/png",
+        f"https://kroki.io/mermaid/{fmt}",
         data=mermaid_src.encode("utf-8"),
         headers={
             "Content-Type": "text/plain",
@@ -50,8 +47,16 @@ def _to_png(mermaid_src: str) -> bytes:
         method="POST",
     )
     with urllib.request.urlopen(req) as resp:
-        raw = resp.read()
+        return resp.read()
 
+
+def _to_png(mermaid_src: str) -> bytes:
+    """Render mermaid source to PNG bytes, flattened onto white.
+
+    Kroki returns a transparent PNG. We flatten it so the diagram reads
+    against any theme.
+    """
+    raw = _kroki(mermaid_src, "png")
     img = Image.open(io.BytesIO(raw))
     if img.mode in ("RGBA", "LA"):
         bg = Image.new("RGB", img.size, "white")
@@ -63,18 +68,29 @@ def _to_png(mermaid_src: str) -> bytes:
     return out.getvalue()
 
 
+def _to_svg(mermaid_src: str) -> str:
+    return _kroki(mermaid_src, "svg").decode("utf-8")
+
+
 def generate_erd(format: str = "markdown", out_path: str | None = None) -> str | bytes:
     """Build the ER diagram.
 
     format="markdown" returns the mermaid source as a string.
     format="png" returns rendered PNG bytes via kroki.io.
+    format="svg" returns rendered SVG source as a string.
     If out_path is given, the result is also written to that path.
     """
-    if format not in ("markdown", "png"):
-        raise ValueError(f"format must be 'markdown' or 'png', got {format!r}")
+    if format not in ("markdown", "png", "svg"):
+        raise ValueError(f"format must be 'markdown', 'png', or 'svg', got {format!r}")
 
     src = _build_mermaid()
-    result: str | bytes = _to_png(src) if format == "png" else src
+    result: str | bytes
+    if format == "png":
+        result = _to_png(src)
+    elif format == "svg":
+        result = _to_svg(src)
+    else:
+        result = src
 
     if out_path is not None:
         mode = "wb" if isinstance(result, bytes) else "w"
@@ -86,9 +102,10 @@ def generate_erd(format: str = "markdown", out_path: str | None = None) -> str |
 
 if __name__ == "__main__":
     args = sys.argv[1:]
-    if args and args[0] == "--png":
-        out_path = args[1] if len(args) > 1 else "erd.png"
-        generate_erd(format="png", out_path=out_path)
+    if args and args[0] in ("--png", "--svg"):
+        fmt = args[0][2:]
+        out_path = args[1] if len(args) > 1 else f"erd.{fmt}"
+        generate_erd(format=fmt, out_path=out_path)
         print(f"wrote {out_path}")
     else:
         print(generate_erd())
