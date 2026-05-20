@@ -32,6 +32,15 @@ See [docs/architecture.md](docs/architecture.md) for more details.
 └── docs/              architecture and design notes
 ```
 
+## Running locally
+
+All data is synthetic and regenerates deterministically from a single seed.
+
+1. `uv run python -m data.data_generator` loads synthetic ERP rows into DSQL (suppliers, POs, goods receipts, supplier invoices).
+2. `uv run python -m data.pdf.supplier_invoice.generate` renders PDFs for invoices already in the DB to `local_pdfs/`.
+3. `uv run python -m data.pdf.supplier_invoice.test_cases` renders fresh invoice PDFs for the agent to process, into `test_invoices/`.
+
+Historical PDFs from step 2 mirror rows already in the DB. Test PDFs from step 3 reference real suppliers and POs but are not yet in the DB. They are the "incoming mail" the agent validates. The tests cases include valid and corrupted pdfs.
 
 ## License
 

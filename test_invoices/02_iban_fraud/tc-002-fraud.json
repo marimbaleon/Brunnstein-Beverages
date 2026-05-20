@@ -1,0 +1,11 @@
+{
+  "slug": "02_iban_fraud",
+  "description": "Invoice references a completely different IBAN than the supplier master.",
+  "expected_outcome": "flag_for_fraud_review",
+  "expected_signals": [
+    "iban_mismatch_full"
+  ],
+  "invoice_number": "tc-002-fraud",
+  "supplier_displayed": "Glasmanufaktur Lehmann GmbH",
+  "po_displayed": "PO-2025-002051"
+}

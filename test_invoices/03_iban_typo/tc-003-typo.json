@@ -1,0 +1,11 @@
+{
+  "slug": "03_iban_typo",
+  "description": "Invoice IBAN has the last two digits swapped. Possible typo or low-effort fraud.",
+  "expected_outcome": "flag_for_review",
+  "expected_signals": [
+    "iban_mismatch_typo"
+  ],
+  "invoice_number": "tc-003-typo",
+  "supplier_displayed": "Würzburger Aromenwerk GmbH",
+  "po_displayed": "PO-2025-002065"
+}

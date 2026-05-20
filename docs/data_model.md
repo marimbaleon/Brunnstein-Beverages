@@ -11,8 +11,19 @@ The model represents data from three logical source systems, collapsed into one 
 | System | Owns | v1 status |
 |---|---|---|
 | ERP | Master and transactional business data: supplier, raw_material, purchase_order, goods_receipt, supplier_invoice | implemented |
-| DMS (stand-in: S3) | Unstructured documents: incoming invoice PDFs, contracts, certificates | implemented (metadata only) |
+| S3 | Source PDFs for incoming supplier invoices; referenced by `supplier_invoice.source_s3_key` | implemented |
 
+## Data layers
+
+The same domain shows up in three states across DSQL and S3:
+
+| Layer | Where | What it represents |
+|---|---|---|
+| Operational data | DSQL tables: `supplier`, `purchase_order`, `goods_receipt`, etc. | Master data and validated transactions Brunnstein already trusts. |
+| Historical inventory | PDFs in `s3://...invoices/<year>/<supplier>/` | Source PDFs for invoices already in the DB. One row in `supplier_invoice` per file. |
+| Inbox | Local `test_invoices/` (later: S3 prefix or email ingest) | Invoices that have not yet been processed. No corresponding row in `supplier_invoice` exists. |
+
+The agent takes an inbox PDF, looks up the operational data, and decides whether to promote the PDF into a `supplier_invoice` row. Test cases live in `data/pdf/supplier_invoice/test_cases.py`, which reads the DB to construct realistic scenarios but never writes back. Re-running it does not dirty state.
 
 ## Entities (v1)
 
@@ -24,9 +35,8 @@ The model represents data from three logical source systems, collapsed into one 
 | `purchase_order_line` | Line items on a purchase order. |
 | `goods_receipt` | Records that ordered materials physically arrived. |
 | `goods_receipt_line` | Quantities received per PO line. |
-| `supplier_invoice` | Incoming invoice from a supplier. Extraction fields nullable until the agent fills them in. |
+| `supplier_invoice` | Incoming invoice from a supplier. Extraction fields nullable until the agent fills them in. Carries `source_s3_key` pointing at the original PDF. |
 | `supplier_invoice_line` | Line items on a supplier invoice. |
-| `document` | Metadata for files stored in S3 (the actual PDFs live there). |
 
 ## ERD
 

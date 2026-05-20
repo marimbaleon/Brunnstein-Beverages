@@ -1,0 +1,11 @@
+{
+  "slug": "07_price_drift",
+  "description": "Invoice unit prices are ~15 percent higher than agreed on the PO.",
+  "expected_outcome": "flag_for_review",
+  "expected_signals": [
+    "unit_price_drift"
+  ],
+  "invoice_number": "tc-007-price",
+  "supplier_displayed": "CapTech München GmbH",
+  "po_displayed": "PO-2025-002056"
+}

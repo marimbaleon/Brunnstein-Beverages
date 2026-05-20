@@ -1,0 +1,11 @@
+{
+  "slug": "08_early_invoice",
+  "description": "Supplier is invoicing for a PO that has not yet been received in the warehouse.",
+  "expected_outcome": "hold_for_goods_receipt",
+  "expected_signals": [
+    "no_matching_goods_receipt"
+  ],
+  "invoice_number": "tc-008-early",
+  "supplier_displayed": "Hygienechemie Süd GmbH",
+  "po_displayed": "PO-2025-002035"
+}
