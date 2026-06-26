@@ -1,0 +1,11 @@
+{
+  "slug": "04_po_not_found",
+  "description": "Invoice references a PO number that does not exist in the system.",
+  "expected_outcome": "flag_for_review",
+  "expected_signals": [
+    "po_not_found"
+  ],
+  "invoice_number": "tc-004-nopo",
+  "supplier_displayed": "Schwarzwaldfrucht GmbH",
+  "po_displayed": "PO-2099-999999"
+}

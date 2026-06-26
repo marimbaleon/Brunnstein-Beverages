@@ -1,0 +1,11 @@
+{
+  "slug": "06_quantity_discrepancy",
+  "description": "Invoice quantities are ~12 percent higher than the goods receipt records.",
+  "expected_outcome": "flag_for_review",
+  "expected_signals": [
+    "quantity_mismatch_vs_goods_receipt"
+  ],
+  "invoice_number": "tc-006-qty",
+  "supplier_displayed": "Etikettendruckerei Reichelt GmbH",
+  "po_displayed": "PO-2025-002032"
+}

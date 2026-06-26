@@ -36,6 +36,9 @@ def _build_mermaid() -> str:
     return "\n".join(lines)
 
 
+_KROKI_TIMEOUT_SECONDS = 15
+
+
 def _kroki(mermaid_src: str, fmt: str) -> bytes:
     req = urllib.request.Request(
         f"https://kroki.io/mermaid/{fmt}",
@@ -46,7 +49,7 @@ def _kroki(mermaid_src: str, fmt: str) -> bytes:
         },
         method="POST",
     )
-    with urllib.request.urlopen(req) as resp:
+    with urllib.request.urlopen(req, timeout=_KROKI_TIMEOUT_SECONDS) as resp:
         return resp.read()
 
 
@@ -72,22 +75,24 @@ def _to_svg(mermaid_src: str) -> str:
     return _kroki(mermaid_src, "svg").decode("utf-8")
 
 
-def generate_erd(format: str = "markdown", out_path: str | None = None) -> str | bytes:
+def generate_erd(output_format: str = "markdown", out_path: str | None = None) -> str | bytes:
     """Build the ER diagram.
 
-    format="markdown" returns the mermaid source as a string.
-    format="png" returns rendered PNG bytes via kroki.io.
-    format="svg" returns rendered SVG source as a string.
+    output_format="markdown" returns the mermaid source as a string.
+    output_format="png" returns rendered PNG bytes via kroki.io.
+    output_format="svg" returns rendered SVG source as a string.
     If out_path is given, the result is also written to that path.
     """
-    if format not in ("markdown", "png", "svg"):
-        raise ValueError(f"format must be 'markdown', 'png', or 'svg', got {format!r}")
+    if output_format not in ("markdown", "png", "svg"):
+        raise ValueError(
+            f"output_format must be 'markdown', 'png', or 'svg', got {output_format!r}"
+        )
 
     src = _build_mermaid()
     result: str | bytes
-    if format == "png":
+    if output_format == "png":
         result = _to_png(src)
-    elif format == "svg":
+    elif output_format == "svg":
         result = _to_svg(src)
     else:
         result = src
@@ -105,7 +110,7 @@ if __name__ == "__main__":
     if args and args[0] in ("--png", "--svg"):
         fmt = args[0][2:]
         out_path = args[1] if len(args) > 1 else f"erd.{fmt}"
-        generate_erd(format=fmt, out_path=out_path)
+        generate_erd(output_format=fmt, out_path=out_path)
         print(f"wrote {out_path}")
     else:
         print(generate_erd())

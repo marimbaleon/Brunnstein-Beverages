@@ -18,7 +18,14 @@ from sqlalchemy.schema import ForeignKeyConstraint, MetaData
 
 
 def get_engine() -> Engine:
-    """Build a SQLAlchemy engine for DSQL using a fresh IAM token."""
+    """Build a SQLAlchemy engine for DSQL using a fresh IAM token.
+
+    The IAM token has a 15-minute TTL by default. We mint a new one each
+    time this is called, so long-running processes should rebuild the
+    engine periodically rather than holding the original. For short-lived
+    workloads (one generator run, one agent invocation) one token is
+    enough.
+    """
     cluster_id = os.environ["DSQL_CLUSTER_ID"]
     region = os.environ.get("AWS_REGION", "eu-central-1")
     profile = os.environ.get("AWS_PROFILE")
@@ -36,6 +43,9 @@ def get_engine() -> Engine:
         f"postgresql+psycopg://admin:{quote_plus(token)}@{hostname}:5432"
         "/postgres?sslmode=require"
     )
+    # AUTOCOMMIT because DSQL caps multi-statement transactions at ~3000 rows;
+    # batched inserts above that limit need to commit per chunk. The agent
+    # uses explicit Session(engine).commit() blocks, which is compatible.
     return create_engine(
         url,
         echo=False,

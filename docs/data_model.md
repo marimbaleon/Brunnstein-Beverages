@@ -23,7 +23,7 @@ The same domain shows up in three states across DSQL and S3:
 | Historical inventory | PDFs in `s3://...invoices/<year>/<supplier>/` | Source PDFs for invoices already in the DB. One row in `supplier_invoice` per file. |
 | Inbox | Local `test_invoices/` (later: S3 prefix or email ingest) | Invoices that have not yet been processed. No corresponding row in `supplier_invoice` exists. |
 
-The agent takes an inbox PDF, looks up the operational data, and decides whether to promote the PDF into a `supplier_invoice` row. Test cases live in `data/pdf/supplier_invoice/test_cases.py`, which reads the DB to construct realistic scenarios but never writes back. Re-running it does not dirty state.
+The agent takes an inbox PDF, looks up the operational data, and decides whether to promote the PDF into a `supplier_invoice` row. Test cases live in `use_cases/automated_invoice_processing/eval/test_case_generation.py`, which reads the DB to construct realistic scenarios but never writes back. Re-running it does not dirty state.
 
 ## Entities (v1)
 

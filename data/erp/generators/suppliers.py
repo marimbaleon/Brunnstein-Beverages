@@ -7,12 +7,12 @@ auxiliaries, and logistics. Faker fills in the rest.
 from __future__ import annotations
 
 import random
-import re
 from dataclasses import dataclass
 from uuid import uuid4
 
 from faker import Faker
 
+from data.erp.generators._text import slugify_company_name
 from data.erp.models import Supplier
 
 
@@ -96,13 +96,6 @@ _PAYMENT_TERMS_BY_SIZE = {"small": 14, "mid": 30, "large": 45}
 _INACTIVE_RATE = 0.08
 
 
-def _slug(name: str) -> str:
-    s = name.lower()
-    s = s.translate(str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"}))
-    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
-    return s
-
-
 def _vat_id(rng: random.Random) -> str:
     return "DE" + "".join(str(rng.randint(0, 9)) for _ in range(9))
 
@@ -127,7 +120,7 @@ def generate_suppliers(seed: int = 42) -> list[Supplier]:
                 postal_code=faker.postcode(),
                 city=tpl.city,
                 country="DE",
-                email=f"info@{_slug(tpl.name)}.de",
+                email=f"info@{slugify_company_name(tpl.name)}.de",
                 phone=faker.phone_number(),
                 active=rng.random() > _INACTIVE_RATE,
             )

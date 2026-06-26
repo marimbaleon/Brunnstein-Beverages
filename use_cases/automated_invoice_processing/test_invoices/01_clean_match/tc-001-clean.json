@@ -1,0 +1,9 @@
+{
+  "slug": "01_clean_match",
+  "description": "Invoice cleanly matches an existing PO. Supplier, IBAN, line quantities and prices all align with master data and goods receipts.",
+  "expected_outcome": "approve",
+  "expected_signals": [],
+  "invoice_number": "tc-001-clean",
+  "supplier_displayed": "Quellrechte Bodensee GmbH",
+  "po_displayed": "PO-2025-002036"
+}

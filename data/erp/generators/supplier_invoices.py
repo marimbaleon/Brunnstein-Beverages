@@ -5,12 +5,13 @@ validation agent to catch later (IBAN drift, price drift, quantity mismatch).
 from __future__ import annotations
 
 import random
-import re
 from collections import defaultdict
 from datetime import timedelta
 from decimal import Decimal
+from typing import NamedTuple
 from uuid import uuid4
 
+from data.erp.generators._text import slugify_company_name
 from data.erp.models import (
     ExtractionStatus,
     GoodsReceipt,
@@ -32,11 +33,13 @@ _RATE_PRICE_DRIFT = 0.04
 _RATE_QTY_MISMATCH = 0.05
 
 
-def _slug(name: str) -> str:
-    s = name.lower()
-    s = s.translate(str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"}))
-    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
-    return s
+class _InvoiceLineData(NamedTuple):
+    po_line: object  # PurchaseOrderLine (avoid import cycle in the type hint)
+    quantity: Decimal
+    unit_price: Decimal
+    net: Decimal
+    vat: Decimal
+    gross: Decimal
 
 
 def _payment_iban(supplier: Supplier, rng: random.Random) -> str:
@@ -72,7 +75,6 @@ def generate_supplier_invoices(
         by_po[str(gr.purchase_order_id)].append(gr)
 
     invoices: list[SupplierInvoice] = []
-    inv_counter = 0
 
     for po_id, receipts in by_po.items():
         po: PurchaseOrder = receipts[0].purchase_order
@@ -80,52 +82,30 @@ def generate_supplier_invoices(
             continue
         supplier = po.supplier
 
-        inv_counter += 1
         # Invoice issued by the supplier 0-14 days after the last receipt.
         last_receipt_date = max(gr.received_date for gr in receipts)
         invoice_date = last_receipt_date + timedelta(days=rng.randint(0, 14))
         due_date = invoice_date + timedelta(days=supplier.payment_terms_days or 30)
         year = invoice_date.year
 
-        s3_key = f"invoices/{year}/{_slug(supplier.name)}/{inv_counter:07d}.pdf"
-
-        # Per-line invoiced quantities: usually match received, occasionally drift.
         received_per_line = _aggregate_received(receipts)
-
-        inv_lines_data: list[tuple] = []
-        price_drift = rng.random() < _RATE_PRICE_DRIFT
-        qty_mismatch = rng.random() < _RATE_QTY_MISMATCH
-
-        for po_line in po.lines:
-            received_qty = received_per_line.get(str(po_line.id), Decimal("0"))
-            if received_qty <= 0:
-                continue
-            invoiced_qty = received_qty
-            unit_price = po_line.unit_price_net_eur
-            if qty_mismatch and rng.random() < 0.5:
-                # Bump or drop quantity by 5-15%
-                factor = Decimal(rng.choice([85, 92, 108, 115])) / Decimal(100)
-                invoiced_qty = (invoiced_qty * factor).quantize(Decimal("0.001"))
-            if price_drift:
-                # Price up by 3-10%
-                factor = Decimal(rng.randint(103, 110)) / Decimal(100)
-                unit_price = (unit_price * factor).quantize(Decimal("0.0001"))
-            net = (invoiced_qty * unit_price).quantize(Decimal("0.01"))
-            vat = (net * _VAT_FACTOR).quantize(Decimal("0.01"))
-            gross = net + vat
-            inv_lines_data.append((po_line, invoiced_qty, unit_price, net, vat, gross))
-
+        inv_lines_data = _build_invoice_lines(po, received_per_line, rng)
         if not inv_lines_data:
-            inv_counter -= 1
             continue
 
-        total_net = sum((row[3] for row in inv_lines_data), Decimal("0"))
-        total_vat = sum((row[4] for row in inv_lines_data), Decimal("0"))
-        total_gross = sum((row[5] for row in inv_lines_data), Decimal("0"))
+        invoice_number_seq = len(invoices) + 1
+        s3_key = (
+            f"invoices/{year}/{slugify_company_name(supplier.name)}/"
+            f"{invoice_number_seq:07d}.pdf"
+        )
+
+        total_net = sum((row.net for row in inv_lines_data), Decimal("0"))
+        total_vat = sum((row.vat for row in inv_lines_data), Decimal("0"))
+        total_gross = sum((row.gross for row in inv_lines_data), Decimal("0"))
 
         inv = SupplierInvoice(
             id=uuid4(),
-            supplier_invoice_number=f"RG-{year}-{inv_counter:07d}",
+            supplier_invoice_number=f"RG-{year}-{invoice_number_seq:07d}",
             supplier_id=supplier.id,
             purchase_order_id=po.id,
             source_s3_key=s3_key,
@@ -143,23 +123,71 @@ def generate_supplier_invoices(
         inv.supplier = supplier
         inv.purchase_order = po
 
-        for i, (po_line, qty, price, net, vat, gross) in enumerate(inv_lines_data, start=1):
-            line = SupplierInvoiceLine(
+        for line_number, row in enumerate(inv_lines_data, start=1):
+            inv.lines.append(SupplierInvoiceLine(
                 id=uuid4(),
                 supplier_invoice_id=inv.id,
-                line_number=i,
-                description=po_line.description,
-                raw_material_id=po_line.raw_material_id,
-                purchase_order_line_id=po_line.id,
-                quantity=qty,
-                unit_price_net_eur=price,
+                line_number=line_number,
+                description=row.po_line.description,
+                raw_material_id=row.po_line.raw_material_id,
+                purchase_order_line_id=row.po_line.id,
+                quantity=row.quantity,
+                unit_price_net_eur=row.unit_price,
                 vat_rate_pct=_DEFAULT_VAT_PCT,
-                line_net_eur=net,
-                line_vat_eur=vat,
-                line_gross_eur=gross,
-            )
-            inv.lines.append(line)
+                line_net_eur=row.net,
+                line_vat_eur=row.vat,
+                line_gross_eur=row.gross,
+            ))
 
         invoices.append(inv)
 
     return invoices
+
+
+# Magic numbers from "what makes the eval scenarios interesting":
+# - QTY_MISMATCH_FACTORS bump or drop quantity by 5-15%
+# - PRICE_DRIFT_FACTOR_RANGE pushes unit price up by 3-10%
+# - The 0.5 below means: when an invoice is marked as having a qty mismatch,
+#   each individual line still has only a 50% chance of being affected, so
+#   the mismatch isn't uniform across all lines (more realistic).
+_QTY_MISMATCH_FACTORS_PCT = (85, 92, 108, 115)
+_QTY_MISMATCH_LINE_PROBABILITY = 0.5
+_PRICE_DRIFT_FACTOR_RANGE_PCT = (103, 110)
+
+
+def _build_invoice_lines(
+    po: PurchaseOrder,
+    received_per_line: dict[str, Decimal],
+    rng: random.Random,
+) -> list[_InvoiceLineData]:
+    rows: list[_InvoiceLineData] = []
+    has_qty_mismatch = rng.random() < _RATE_QTY_MISMATCH
+    has_price_drift = rng.random() < _RATE_PRICE_DRIFT
+
+    for po_line in po.lines:
+        received_qty = received_per_line.get(str(po_line.id), Decimal("0"))
+        if received_qty <= 0:
+            continue
+
+        invoiced_qty = received_qty
+        unit_price = po_line.unit_price_net_eur
+
+        if has_qty_mismatch and rng.random() < _QTY_MISMATCH_LINE_PROBABILITY:
+            factor = Decimal(rng.choice(_QTY_MISMATCH_FACTORS_PCT)) / Decimal(100)
+            invoiced_qty = (invoiced_qty * factor).quantize(Decimal("0.001"))
+        if has_price_drift:
+            lo, hi = _PRICE_DRIFT_FACTOR_RANGE_PCT
+            factor = Decimal(rng.randint(lo, hi)) / Decimal(100)
+            unit_price = (unit_price * factor).quantize(Decimal("0.0001"))
+
+        net = (invoiced_qty * unit_price).quantize(Decimal("0.01"))
+        vat = (net * _VAT_FACTOR).quantize(Decimal("0.01"))
+        rows.append(_InvoiceLineData(
+            po_line=po_line,
+            quantity=invoiced_qty,
+            unit_price=unit_price,
+            net=net,
+            vat=vat,
+            gross=net + vat,
+        ))
+    return rows

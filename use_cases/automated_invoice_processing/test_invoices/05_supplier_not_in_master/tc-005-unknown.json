@@ -1,0 +1,12 @@
+{
+  "slug": "05_supplier_not_in_master",
+  "description": "Supplier name does not match any record in supplier master data.",
+  "expected_outcome": "flag_for_review",
+  "expected_signals": [
+    "supplier_unknown",
+    "po_not_found"
+  ],
+  "invoice_number": "tc-005-unknown",
+  "supplier_displayed": "Hamburger Maschinenbau Schmidt GmbH",
+  "po_displayed": "PO-2025-555555"
+}

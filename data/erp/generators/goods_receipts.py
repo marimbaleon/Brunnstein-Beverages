@@ -23,18 +23,19 @@ from data.erp.models import (
 def _receipt_dates(po: PurchaseOrder, rng: random.Random) -> list[date]:
     """Closed POs may arrive in 1-2 shipments, partial POs in 1 (incomplete) shipment."""
     if po.status == PurchaseOrderStatus.closed:
-        n = rng.choices([1, 2], weights=[80, 20], k=1)[0]
+        n_shipments = rng.choices([1, 2], weights=[80, 20], k=1)[0]
     else:
-        n = 1
-    dates = []
-    base = po.order_date
-    for i in range(n):
-        # First receipt 3-21 days after order, second 7-30 days after first
-        if i == 0:
-            offset = rng.randint(3, 21)
+        n_shipments = 1
+    dates: list[date] = []
+    order_date = po.order_date
+    for shipment_index in range(n_shipments):
+        # First receipt 3-21 days after order, subsequent receipts 7-30 days
+        # after the previous one.
+        if shipment_index == 0:
+            offset_days = rng.randint(3, 21)
         else:
-            offset = (dates[-1] - base).days + rng.randint(7, 30)
-        dates.append(base + timedelta(days=offset))
+            offset_days = (dates[-1] - order_date).days + rng.randint(7, 30)
+        dates.append(order_date + timedelta(days=offset_days))
     return dates
 
 

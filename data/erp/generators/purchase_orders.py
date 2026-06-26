@@ -9,6 +9,7 @@ import math
 import random
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import NamedTuple
 from uuid import uuid4
 
 from data.erp.generators._market_helpers import (
@@ -50,43 +51,72 @@ def _supplier_weight(supplier: Supplier) -> float:
     return 1.0  # KG, OHG, eG
 
 
+class _PoLineData(NamedTuple):
+    material: RawMaterial
+    quantity: Decimal
+    unit_price: Decimal
+    net: Decimal
+    vat: Decimal
+    gross: Decimal
+
+
+# PO status distribution by age. Weights are tuned to produce roughly the
+# mix a healthy procurement function shows at any given point: most old
+# orders are closed, recent ones are still in flight.
+_STATUS_WEIGHTS_OLD = {
+    PurchaseOrderStatus.closed: 98,
+    PurchaseOrderStatus.cancelled: 2,
+}
+_STATUS_WEIGHTS_MIDDLE = {
+    PurchaseOrderStatus.closed: 70,
+    PurchaseOrderStatus.partial: 25,
+    PurchaseOrderStatus.cancelled: 5,
+}
+_STATUS_WEIGHTS_RECENT = {
+    PurchaseOrderStatus.open: 55,
+    PurchaseOrderStatus.partial: 40,
+    PurchaseOrderStatus.cancelled: 5,
+}
+
+# Line-count distribution: typical PO has 2-4 lines, the long tail thins out.
+_LINE_COUNT_WEIGHTS = [5, 18, 25, 22, 14, 9, 5, 2]  # for n_lines = 1..8
+
+
 def _resolve_status(order_date: date, today: date, rng: random.Random) -> PurchaseOrderStatus:
     age_days = (today - order_date).days
     if age_days > 90:
-        # Old POs: nearly all closed, a sliver cancelled
-        return rng.choices(
-            [PurchaseOrderStatus.closed, PurchaseOrderStatus.cancelled],
-            weights=[98, 2],
-            k=1,
-        )[0]
-    if age_days > 30:
-        return rng.choices(
-            [PurchaseOrderStatus.closed, PurchaseOrderStatus.partial, PurchaseOrderStatus.cancelled],
-            weights=[70, 25, 5],
-            k=1,
-        )[0]
-    return rng.choices(
-        [PurchaseOrderStatus.open, PurchaseOrderStatus.partial, PurchaseOrderStatus.cancelled],
-        weights=[55, 40, 5],
-        k=1,
-    )[0]
+        weights = _STATUS_WEIGHTS_OLD
+    elif age_days > 30:
+        weights = _STATUS_WEIGHTS_MIDDLE
+    else:
+        weights = _STATUS_WEIGHTS_RECENT
+    return rng.choices(list(weights.keys()), weights=list(weights.values()), k=1)[0]
 
 
 def _build_lines(
     materials: list[RawMaterial],
     rng: random.Random,
-) -> list[tuple[RawMaterial, Decimal, Decimal, Decimal, Decimal, Decimal]]:
-    """Return list of (material, quantity, unit_price, line_net, line_vat, line_gross)."""
-    n_lines = rng.choices([1, 2, 3, 4, 5, 6, 7, 8], weights=[5, 18, 25, 22, 14, 9, 5, 2], k=1)[0]
+) -> list[_PoLineData]:
+    n_lines = rng.choices(
+        list(range(1, len(_LINE_COUNT_WEIGHTS) + 1)),
+        weights=_LINE_COUNT_WEIGHTS,
+        k=1,
+    )[0]
     picked = rng.sample(materials, min(n_lines, len(materials)))
-    rows = []
-    for m in picked:
-        qty = pick_quantity(m, rng)
-        price = pick_unit_price(m, rng)
+    rows: list[_PoLineData] = []
+    for material in picked:
+        qty = pick_quantity(material, rng)
+        price = pick_unit_price(material, rng)
         net = (qty * price).quantize(Decimal("0.01"))
         vat = (net * _VAT_FACTOR).quantize(Decimal("0.01"))
-        gross = net + vat
-        rows.append((m, qty, price, net, vat, gross))
+        rows.append(_PoLineData(
+            material=material,
+            quantity=qty,
+            unit_price=price,
+            net=net,
+            vat=vat,
+            gross=net + vat,
+        ))
     return rows
 
 
@@ -115,16 +145,17 @@ def generate_purchase_orders(
 
     weights = [_supplier_weight(s) for s, _ in eligible]
 
+    # Seasonality is the same shape every year; compute once.
+    month_weights = [_seasonality(m) for m in range(1, 13)]
+    monthly_share = [w / sum(month_weights) for w in month_weights]
+
     orders: list[PurchaseOrder] = []
     po_counter = 0
     start_year, end_year = year_range
     for year in range(start_year, end_year + 1):
         n_year = int(_BASE_POS_PER_YEAR * _YEAR_GROWTH.get(year, 1.0))
-        # Distribute by seasonality across months.
-        month_weights = [_seasonality(m) for m in range(1, 13)]
         for month in range(1, 13):
-            share = month_weights[month - 1] / sum(month_weights)
-            n_month = round(n_year * share)
+            n_month = round(n_year * monthly_share[month - 1])
             for _ in range(n_month):
                 po_counter += 1
                 supplier, supplier_materials = rng.choices(eligible, weights=weights, k=1)[0]
@@ -134,10 +165,11 @@ def generate_purchase_orders(
 
                 lines_data = _build_lines(supplier_materials, rng)
                 if not lines_data:
+                    po_counter -= 1  # leave the counter dense for the next iteration
                     continue
-                total_net = sum((row[3] for row in lines_data), Decimal("0"))
-                total_vat = sum((row[4] for row in lines_data), Decimal("0"))
-                total_gross = sum((row[5] for row in lines_data), Decimal("0"))
+                total_net = sum((row.net for row in lines_data), Decimal("0"))
+                total_vat = sum((row.vat for row in lines_data), Decimal("0"))
+                total_gross = sum((row.gross for row in lines_data), Decimal("0"))
 
                 status = _resolve_status(order_date, today, rng)
 
@@ -154,21 +186,21 @@ def generate_purchase_orders(
                     notes=None,
                 )
                 po.supplier = supplier
-                for i, (m, qty, price, net, vat, gross) in enumerate(lines_data, start=1):
+                for line_number, row in enumerate(lines_data, start=1):
                     line = PurchaseOrderLine(
                         id=uuid4(),
                         purchase_order_id=po.id,
-                        line_number=i,
-                        raw_material_id=m.id,
-                        description=m.name,
-                        quantity=qty,
-                        unit_price_net_eur=price,
+                        line_number=line_number,
+                        raw_material_id=row.material.id,
+                        description=row.material.name,
+                        quantity=row.quantity,
+                        unit_price_net_eur=row.unit_price,
                         vat_rate_pct=_DEFAULT_VAT,
-                        line_net_eur=net,
-                        line_vat_eur=vat,
-                        line_gross_eur=gross,
+                        line_net_eur=row.net,
+                        line_vat_eur=row.vat,
+                        line_gross_eur=row.gross,
                     )
-                    line.raw_material = m
+                    line.raw_material = row.material
                     po.lines.append(line)
                 orders.append(po)
 

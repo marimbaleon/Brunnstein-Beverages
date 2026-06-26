@@ -37,6 +37,22 @@ build/
 # Local PDF output
 local_pdfs/
 
+# Generated lake outputs -- raw file feeds (regenerate with data.export.lake)
+# and the relational model flattened to parquet/csv (data.export.structured).
+data/export/bronze/
+data/export/structured/
+
+# Generated unstructured document artefacts (regenerate with data.documents.generate).
+# Only the rendered output is ignored; the generator code stays tracked.
+data/documents/contracts/
+data/documents/complaints/
+data/documents/dunning/
+data/documents/images/
+data/documents/spec_sheets/
+
+# MLflow local runs
+mlruns/
+
 # Terraform
 infra/.terraform/
 infra/terraform.tfstate
